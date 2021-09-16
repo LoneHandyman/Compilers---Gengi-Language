@@ -75,7 +75,7 @@ void gg::scan(const char* file){
         Token new_token = generateToken(content, eof);
         std::cout << new_token << std::endl;
         if(new_token.bad_token_)
-          std::cerr << "GG-compiler: LEXICAL ERROR\n";
+          std::cerr << "[WARNING] -->>> GG-compiler: LEXICAL ERROR\n";
       }
     }
     else{

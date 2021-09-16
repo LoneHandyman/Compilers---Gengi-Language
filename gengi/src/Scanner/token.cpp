@@ -53,9 +53,10 @@ gg::Token gg::generateToken(std::stringstream& charSource, bool& eof){
       }
     }
   }
-  else if(isdigit(inflection_char) || (isdigit((char)charSource.peek()) && inflection_char == '.')){//integer, decimal
+  else if(isdigit(inflection_char) || (isdigit((char)charSource.peek()) && (inflection_char == '.' || inflection_char == '-'))){//integer, decimal
     char next_tk_char = (char)charSource.peek();
-    lexeme_intent.push_back(inflection_char);
+    if(inflection_char != '-')
+      lexeme_intent.push_back(inflection_char);
     while(!charSource.eof() && (isdigit(next_tk_char) || next_tk_char == '.')){
       lexeme_intent.push_back(next_tk_char);
       charSource.get();
@@ -88,6 +89,8 @@ gg::Token gg::generateToken(std::stringstream& charSource, bool& eof){
             lexeme_intent += "0";
         }
       }
+      if(inflection_char == '-')
+        lexeme_intent.insert(lexeme_intent.begin(), inflection_char);
     }
   }
   else{//is another symbol
@@ -150,15 +153,17 @@ gg::Token gg::generateToken(std::stringstream& charSource, bool& eof){
       new_token_t = TokenType::OP_OR;
     }
     else if(inflection_char == '\''){
-      bool ignore_next_char = false;
+      bool ignore_next_char = false, closed_string = false;
       char next_str_char = 0;
       while(!charSource.eof()){
         next_str_char = (char)charSource.get();
         if(ignore_next_char == true)
           ignore_next_char = false;
         else{
-          if(next_str_char == '\'')
+          if(next_str_char == '\''){
+            closed_string = true;
             break;
+          }
           if(next_str_char == '\\'){
             ignore_next_char = true;
             continue;
@@ -166,7 +171,8 @@ gg::Token gg::generateToken(std::stringstream& charSource, bool& eof){
         }
         lexeme_intent.push_back(next_str_char);
       }
-      new_token_t = TokenType::STRING;
+      if(closed_string)
+        new_token_t = TokenType::STRING;
     }
     else if(inflection_char == -1)
       new_token_t = TokenType::EOF_;
