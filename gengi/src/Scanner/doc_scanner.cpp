@@ -1,4 +1,5 @@
 #include "Scanner/doc_scanner.hpp"
+#include "Scanner/kmp.hpp"
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -6,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-#define GG_EXTENSION "gg"
+#define LANG_GENGI_EXTENSION "gg"
 
 bool belongExtension(const char* file, const char* ext){
   std::stringstream file_name;
@@ -37,22 +38,44 @@ void cleanCode(std::string& source){
   source = src_copy;
 }
 
+std::string cleanComments(std::vector<std::string>& code_lines){
+  std::string merged_content = "";
+  std::vector<std::size_t> comm_pos_begin;
+  std::vector<int32_t> prefix_table = lex::prefix(">>>");
+  for(std::size_t idx = 0; idx < code_lines.size(); ++idx){
+    comm_pos_begin = lex::kmp(code_lines[idx], ">>>", prefix_table);
+    if(comm_pos_begin.size())
+      code_lines[idx] = code_lines[idx].substr(0, comm_pos_begin[0]);
+    code_lines[idx] += "\n";
+    merged_content += code_lines[idx];
+  }
+  return merged_content;
+}
+
 void gg::scan(const char* file){
-  if(belongExtension(file, GG_EXTENSION)){
+  if(belongExtension(file, LANG_GENGI_EXTENSION)){
     std::ifstream file_content_stream(file);
     if(file_content_stream.is_open()){
       std::stringstream content;
-      std::string readed_content;
+      std::vector<std::string> readed_content;
+      std::string code_line;
       while(!file_content_stream.eof()){
-        readed_content.push_back((char)file_content_stream.get());
+        std::getline(file_content_stream, code_line, '\n');
+        std::cout << code_line << std::endl;
+        readed_content.push_back(code_line);
       }
       file_content_stream.close();
-      cleanCode(readed_content);
-      content.str(readed_content);
+      std::string fixed_content = cleanComments(readed_content);
+      std::cout << fixed_content << std::endl;
+      cleanCode(fixed_content);
+      content.str(fixed_content);
       std::cout << content.str() << std::endl;
       bool eof = false;
       while(!eof){
-        std::cout << generateToken(content, eof) << std::endl;
+        Token new_token = generateToken(content, eof);
+        std::cout << new_token << std::endl;
+        if(new_token.bad_token_)
+          std::cerr << "GG-compiler: LEXICAL ERROR\n";
       }
     }
     else{
