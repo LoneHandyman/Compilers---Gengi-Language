@@ -1,0 +1,65 @@
+>>> img_assets es una carpeta llena de imagenes <<<
+import 'res/img_assets' as imgSource
+import 'scripts/world_1_environment_code.gg' as env
+
+#preprocess_begin
+gnode character_1, enemy_1;
+link(character_1, 'scripts/script_char_1.gg'); >>> La funcion link se encarga de conectar
+link(enemy_1, 'scripts/script_enemy_1.gg');    >>> un script como path con una entidad de juego "gnode"
+set(character_1, 'weapons.axe.skin', imgSource.fire_axe.gif);
+spawn character_1;>>> Linea donde se invoca al personaje en el juego
+
+char_1_score = 1;
+
+#preprocess_end
+>>> Aqui termina el preprocesamiento aunque puede continuar en otra seccion
+
+function execute_enemy(enemy, character){
+  >>> Ejecutar enemigos
+  while(enemy.get_energyCount() >= 50){
+    if(enemy.get_energyCount() % 6 == 0){
+      enemy.shot_fireball(character.position);
+    }
+    >>> Resto de la funcion
+  }
+  for(bullet : character.bullet){
+    char_1_score = char_1_score * enemy.receiveDamage(bullet);
+  }
+  return enemy.isAlive();
+}
+
+if(get(character_1, 'stats.coins') == 0){
+  env.game_over();
+}
+else{
+  enemies = [enemy_1, enemy_1, enemy_1, enemy_1];
+  for(enemy : enemies){
+    if(!enemy.was_spawn()){
+      spawn enemy;
+    }
+    if(execute_enemy(enemy, character)){
+      >>> Aqui se llama y ejecuta la funcion execute_enemy
+    }
+  }
+  >>> Resto del juego(...)
+}
+
+>>> Codigo sin contexto para completar los tokens faltantes
+
+if(var_1 == 0){
+  c = a + b / 2.697 - d;
+}
+else if(var1 >= 30 || var_2 > 20){
+
+}
+else if(var1 <= 20 || var_3 < 40){
+
+}
+
+else if(var1 != -40){
+
+}
+
+if(!boolean_1 && (boolean_2 ^ boolean_3)){
+
+}
