@@ -1,1 +1,5 @@
-S -> $
+S -> expr | $
+expr -> Begin_paren expr End_paren | Number Aritmetic_op Number
+func -> Id Dot_op Begin_paren func End_paren | Function Id Begin_paren param End_paren
+param -> Id nparam | #
+nparam -> Comma Id nparam | #
