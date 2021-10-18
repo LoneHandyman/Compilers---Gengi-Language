@@ -1,8 +1,17 @@
-token_types = ["Aritmetic_op", "Boolean_op", "Begin_braces", "End_braces",
+
+token_names = ["Aritmetic_op", "Boolean_op", "Begin_braces", "End_braces",
                "Begin_brackets", "End_brackets", "Semicolon", "Comma", "Iterator_op",
                "Comparator_op", "Dot_op", "Begin_paren", "End_paren", "Id", "If", "Else",
                "Function", "Return", "Gnode", "Set", "Get", "Link", "Spawn", "Import",
-               "As", "For", "While", "Sp_prep_begin", "Sp_prep_end", "Assign_op", "Number", "String", "$"]
+               "As", "For", "While", "Sp_prep_begin", "Sp_prep_end", "Assign_op",
+               "Number", "String", "EOF"]
+
+token_types = ["@", "BOP", "{", "}",
+               "[", "]", ";", ",", ":",
+               "?", "_", "(", ")", "Id", "If", "Else",
+               "Function", "Return", "Gnode", "Set", "Get", "Link", "Spawn", "Import",
+               "As", "For", "While", "Sp_prep_begin", "Sp_prep_end", "Assign_op",
+               "Number", "String", "$"]
 
 Aritmetic_op = 0
 Boolean_op = 1
@@ -83,5 +92,5 @@ class Token:
   def __repr__(self):
     type_str = "None"
     if self.type is not None:
-      type_str = self.type
+      type_str = token_names[token_types.index(self.type)]
     return "<Type: " + type_str + ", Lex: \'" + self.lexeme + "\' >"

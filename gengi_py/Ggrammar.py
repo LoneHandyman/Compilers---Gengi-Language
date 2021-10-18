@@ -1,52 +1,10 @@
 from collections import OrderedDict
+from copy import copy
+from anytree import Node
+from Gtools import Rule, MemoHelper, Stack
 import Gtoken
 import re
 import itertools
-
-class InvalidProduction(Exception):
-  def __init__(self, message, production):
-    super().__init__(message)
-    self.production = production
-
-class Rule:
-  def __init__(self, head, body):
-    self.head = head
-    self.body = body
-    if not isinstance(self.body, tuple):
-      raise ValueError("Body of production must be a tuple")
-    if (head,) == body:
-      raise InvalidProduction("Invalid production. Head is the same as body.", self)
-
-  def __eq__(self, other):
-    return self.head == other.head and self.body == other.body
-
-  def __str__(self):
-    return "{} → {}".format(self.head, ' '.join(self.body))
-
-  def __repr__(self):
-    return "Rule({}, {})".format(repr(self.head), self.body)
-
-  def __hash__(self):
-    return hash((self.head, self.body))
-
-class MemoHelper:
-  def __init__(self, seq=()):
-    self.tup = tuple(seq)
-
-  def __eq__(self, other):
-    return isinstance(self, type(other))
-
-  def __hash__(self):
-    return hash(type(self))
-
-  def __add__(self, seq=()):
-    return MemoHelper(self.tup + tuple(seq))
-
-  def __iter__(self):
-    return iter(self.tup)
-
-  def __str__(self):
-    return str(self.tup)
 
 class Grammar:
   def __init__(self, start=None, epsilon='#', eof='$'):
@@ -130,8 +88,91 @@ class Grammar:
         follow_set = follow_set.union(self.follow(x, previous))
     return sorted(follow_set)
 
+  def parsing_table(self, is_clean=True):
+    from Gtools import remove_left_recursion, remove_left_factoring
+    equiv = self if is_clean else remove_left_recursion(remove_left_factoring(copy(self)))
+    table = {}
+    ambigous = False
+    for r in equiv.iter_productions():
+      terminals = equiv.first(r.body)
+      for t in terminals:
+        if not equiv.is_terminal(t):
+          continue
+        if t == equiv.epsilon:
+          f = equiv.follow(r.head)
+          for ef in f:
+            if (table.get((r.head, ef))):
+              ls = []
+              ls.append(table[(r.head, ef)])
+              ls.append(r)
+              table[(r.head, ef)] = ls
+              ambigous = True
+            else:
+              table[(r.head, ef)] = r
+        else:
+          if (table.get((r.head, t))):
+            ls = []
+            ls.append(table[(r.head, t)])
+            ls.append(r)
+            table[(r.head, t)] = ls
+            ambigous = True
+          else:
+            table[(r.head, t)] = r
+    return (table, ambigous)
+
+
   def parse(self, tokens):
-    pass
+    table, ambiguous = self.parsing_table(is_clean=True)
+    if ambiguous:
+      raise Warning("Ambiguous self")
+
+    error_list = []
+    tokens.append(Gtoken.Token(self.eof, ""))
+    curr_token = tokens.pop(0)
+    stack = Stack()
+
+    stack.put((self.eof, None))
+    root = Node(self.start)
+    stack.put((self.start, root))
+
+    top_stack = stack.peek()
+    while True:
+      print(f"Current_word:{curr_token},  Stack:{stack.queue}")
+      if top_stack[0].type == self.eof and curr_token.type == self.eof:
+        if not error_list:
+          return True, root, None
+        else:
+          return False, root, error_list
+
+      if self.is_terminal(top_stack[0].type):
+        if top_stack[0].type == curr_token.type:
+          print(f"Consume input: {curr_token}")
+          stack.get()
+          curr_token = tokens.pop(0)
+        else:
+          error_list.append(f"Expected {top_stack[0].type}")
+          while curr_token.type != top_stack[0].type:
+            if curr_token.type == self.eof:
+              return False, root, error_list
+            curr_token = tokens.pop(0)
+      else:
+        rule = table.get((top_stack[0].type, curr_token.type))
+        stack.get()
+        if rule:
+          print(f"Rule: {rule}")
+          symbols = rule.body[::-1]
+          for symbol in symbols:
+            node = Node(symbol, parent=top_stack[1].type)
+            if symbol != self.epsilon:
+              stack.put((symbol, node))
+        else:
+          error_list.append(f"Unexpected character:{curr_token.type}. Expected: {self.first(top_stack[0])}")
+          follow = self.follow(top_stack[0].type) + [self.eof]
+          print(f"Error! Sync set: {follow}")
+          while curr_token.type not in follow:
+            print(f"Skipped: {curr_token.type}")
+            curr_token = tokens.pop(0)
+      top_stack = stack.peek()
 
   def add_rule(self, rule):
     try:
@@ -154,7 +195,3 @@ def open_grammar(grammar, path):
       grammar.add_rule(Rule(head, tk_production))
   grammar.start = list(grammar.productions.items())[0][0]
   return grammar
-
-grammar = Grammar()
-file = open_grammar(grammar, 'GengiGrammar.gram')
-#print('\u03B5')
