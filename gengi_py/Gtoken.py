@@ -2,16 +2,16 @@
 token_names = ["Aritmetic_op", "Boolean_op", "Begin_braces", "End_braces",
                "Begin_brackets", "End_brackets", "Semicolon", "Comma", "Iterator_op",
                "Comparator_op", "Dot_op", "Begin_paren", "End_paren", "Id", "If", "Else",
-               "Function", "Return", "Gnode", "Set", "Get", "Link", "Spawn", "Import",
-               "As", "For", "While", "Sp_prep_begin", "Sp_prep_end", "Assign_op",
+               "Function", "Return", "Gnode", "Set", "Link", "Spawn", "Import",
+               "As", "For", "While", "Sp_prep_begin", "Sp_prep_end", "Assign_op", "Not_op",
                "Number", "String", "EOF"]
 
 token_types = ["@", "BOP", "{", "}",
                "[", "]", ";", ",", ":",
-               "?", "_", "(", ")", "Id", "If", "Else",
-               "Function", "Return", "Gnode", "Set", "Get", "Link", "Spawn", "Import",
-               "As", "For", "While", "Sp_prep_begin", "Sp_prep_end", "Assign_op",
-               "Number", "String", "$"]
+               "?", "_", "(", ")", "id", "if", "else",
+               "function", "return", "gnode", "set", "link", "spawn", "import",
+               "as", "for", "while", "sp_prep_begin", "sp_prep_end", "=", "!",
+               "number", "string", "$"]
 
 Aritmetic_op = 0
 Boolean_op = 1
@@ -33,16 +33,16 @@ Function = 16
 Return = 17
 Gnode = 18
 Set = 19
-Get = 20
-Link = 21
-Spawn = 22
-Import = 23
-As = 24
-For = 25
-While = 26
-Sp_prep_begin = 27
-Sp_prep_end = 28
-Assign_op = 29
+Link = 20
+Spawn = 21
+Import = 22
+As = 23
+For = 24
+While = 25
+Sp_prep_begin = 26
+Sp_prep_end = 27
+Assign_op = 28
+Not_op = 29
 Number = 30
 String = 31
 
@@ -51,16 +51,16 @@ special_single_symbols = {
   '/': token_types[Aritmetic_op], '^': token_types[Boolean_op], '(': token_types[Begin_paren],
   ')': token_types[End_paren], ':': token_types[Iterator_op], ';': token_types[Semicolon],
   '{': token_types[Begin_braces], '}': token_types[End_braces], '[': token_types[Begin_brackets],
-  ']': token_types[End_brackets], '.': token_types[Dot_op], '%': token_types[Aritmetic_op]
+  ']': token_types[End_brackets], '.': token_types[Dot_op], '%': token_types[Aritmetic_op],
+  ',': token_types[Comma]
 }
 
 reserved_keywords = {
   "if": token_types[If], "else": token_types[Else], "function": token_types[Function],
   "return": token_types[Return], "gnode": token_types[Gnode], "set": token_types[Set],
-  "get": token_types[Get], "link": token_types[Link], "spawn": token_types[Spawn],
-  "import": token_types[Import], "as": token_types[As], "for": token_types[For], 
-  "while": token_types[While], "#preprocess_begin": token_types[Sp_prep_begin], 
-  "#preprocess_end": token_types[Sp_prep_end]
+  "link": token_types[Link], "spawn": token_types[Spawn], "import": token_types[Import],
+  "as": token_types[As], "for": token_types[For], "while": token_types[While], 
+  "#preprocess_begin": token_types[Sp_prep_begin], "#preprocess_end": token_types[Sp_prep_end]
 }
 
 class StringStream:
@@ -91,6 +91,9 @@ class Token:
 
   def __repr__(self):
     type_str = "None"
+    color_id = "\033[32m"
     if self.type is not None:
       type_str = token_names[token_types.index(self.type)]
-    return "<Type: " + type_str + ", Lex: \'" + self.lexeme + "\' >"
+    else:
+      color_id = "\033[91m"
+    return color_id + "<Type: " + type_str + ", Lex: \'" + self.lexeme + "\' >" + "\033[37m"

@@ -1,32 +1,42 @@
+import itertools
 from collections import OrderedDict
 from copy import copy
-from anytree import Node
-from Gtools import Rule, MemoHelper, Stack
-import Gtoken
-import re
-import itertools
+from functools import lru_cache
+
+visited = set()
+
+class InvalidGrammar(Exception):
+  def __init__(self, message, bnf_text):
+    super().__init__(message)
+    self.bnf_text = bnf_text
+
+class MemoHelper:
+  def __init__(self, seq=()):
+    self.tup = tuple(seq)
+
+  def __eq__(self, other):
+    return isinstance(self, type(other))
+
+  def __hash__(self):
+    return hash(type(self))
+
+  def __add__(self, seq=()):
+    return MemoHelper(self.tup + tuple(seq))
+
+  def __iter__(self):
+    return iter(self.tup)
+
+  def __str__(self):
+    return str(self.tup)
 
 class Grammar:
-  def __init__(self, start=None, epsilon='#', eof='$'):
-    self.productions = OrderedDict()
+  def __init__(self, productions=None, start=None, epsilon='\'\'', eof='$'):
+    self.productions = productions if productions else OrderedDict()
     self.start = start
     self.epsilon = epsilon
     self.eof = eof
-
-  def remove_rule(self, rule):
-    self.productions[rule.head].remove(rule)
-
-  def is_terminal(self, s):
-    return s not in self.nonterminals
-
-  def is_start_symbol(self, symbol):
-    return self.start == symbol
-      
-  def iter_productions(self):
-    return itertools.chain.from_iterable(self.productions.values())
-  
-  def productions_for(self, symbol):
-    return [production.body for production in self.productions[symbol]]
+    self.symbol_table = None
+    self.__clear_cache()
 
   @property
   def nonterminals(self):
@@ -43,54 +53,86 @@ class Grammar:
 
     return terminals.keys()
 
-  def first_multiple(self, tokens):
-    first_multiple_set = set()
-    for token in tokens:
-      first_set = self.first(token)
-      first_multiple_set.union(first_set)
-      if self.epsilon not in first_set:
-        break
-    return first_multiple_set
+  def iter_productions(self):
+    return itertools.chain.from_iterable(self.productions.values())
 
-  def first(self, symbol):
-    first_set = set()
-    if isinstance(symbol, tuple):
-      first_set = self.first_multiple(symbol)
-    elif self.is_terminal(symbol):
-      first_set.add(symbol)
+  def add_rule(self, rule):
+    try:
+      current_productions = self.productions[rule.head]
+      if rule not in current_productions:
+        current_productions.append(rule)
+    except KeyError:
+      self.productions[rule.head] = [rule]
+    finally:
+      self.__clear_cache()
+
+  def remove_rule(self, rule):
+    self.productions[rule.head].remove(rule)
+    self.__clear_cache()
+
+  def is_terminal(self, s):
+    return s not in self.nonterminals
+
+  def is_start_symbol(self, symbol):
+    return self.start == symbol
+
+  def productions_for(self, a):
+    return [p.body for p in self.productions[a]]
+
+  def first(self, x):
+    f = set()
+    if isinstance(x, tuple):
+      f = self.first_multiple(x)
+    elif self.is_terminal(x):
+      f = {x}
     else:
-      for production in self.productions_for(symbol):
-        first_set.union(self.first(production))
+      for p in self.productions_for(x):
+        f = f.union(self.first(p))
 
-    return sorted(first_set)
+    return sorted(f)
 
-  def follow(self, nonterminal):
-    previous = MemoHelper()
+  def first_multiple(self, tokens):
+    f = set()
+    for t in tokens:
+      ft = self.first(t)
+      f = f.union(ft)
+      if self.epsilon not in ft:
+        f = f - {self.epsilon}
+        break
+
+    return f
+
+  @lru_cache(maxsize=20)
+  def follow(self, nonterminal, previous=MemoHelper()):
     previous += (nonterminal,)
-    follow_set = set()
+    f = set()
     if self.is_start_symbol(nonterminal):
-      follow_set.add(self.eof)
+      f.add(self.eof)
     subsets = set()
-    for production in self.iter_productions():
-      if nonterminal in production.body:
-        position = production.body.index(nonterminal)
-        a = production.body[0:position]
-        b = production.body[position + 1:]
+    for p in self.iter_productions():
+      if nonterminal in p.body:
+        position = p.body.index(nonterminal)
+        a = p.body[0:position]
+        b = p.body[position + 1:]
+
         if b:
-          follow_set = follow_set.union(set(self.first(b)) - {self.epsilon})
+          f = f.union(set(self.first(b)) - {self.epsilon})
+
         if not b:
-          subsets.add(production.head)
+          subsets.add(p.head)
         elif b and self.epsilon in self.first(b):
-          subsets.add(production.head)
+          subsets.add(p.head)
     subsets = subsets - {nonterminal}
     for x in subsets:
       if x not in previous:
-        follow_set = follow_set.union(self.follow(x, previous))
-    return sorted(follow_set)
+        f = f.union(self.follow(x, previous))
+
+    return sorted(f)
 
   def parsing_table(self, is_clean=True):
     from Gtools import remove_left_recursion, remove_left_factoring
     equiv = self if is_clean else remove_left_recursion(remove_left_factoring(copy(self)))
+
     table = {}
     ambigous = False
     for r in equiv.iter_productions():
@@ -118,80 +160,39 @@ class Grammar:
             ambigous = True
           else:
             table[(r.head, t)] = r
+    if not ambigous:
+      self.symbol_table = table
     return (table, ambigous)
 
+  def print_join_productions(self):
+    print(self)
 
-  def parse(self, tokens):
-    table, ambiguous = self.parsing_table(is_clean=True)
-    if ambiguous:
-      raise Warning("Ambiguous self")
+  def productions_for_string(self, x):
+    s = [' '.join(p.body) for p in self.productions[x]]
+    return s
 
-    error_list = []
-    tokens.append(Gtoken.Token(self.eof, ""))
-    curr_token = tokens.pop(0)
-    stack = Stack()
+  def __clear_cache(self):
+    self.follow.cache_clear()
 
-    stack.put((self.eof, None))
-    root = Node(self.start)
-    stack.put((self.start, root))
+  def __str__(self):
+    prod_strings = []
+    for x in self.nonterminals:
+      bodies = [' '.join(p.body) for p in self.productions[x]]
+      prod_strings.append("{} -> {}".format(x, ' | '.join(bodies)))
+    return '\n'.join(prod_strings)
 
-    top_stack = stack.peek()
-    while True:
-      print(f"Current_word:{curr_token},  Stack:{stack.queue}")
-      if top_stack[0].type == self.eof and curr_token.type == self.eof:
-        if not error_list:
-          return True, root, None
-        else:
-          return False, root, error_list
+  def __repr__(self):
+    return '\n'.join([str(p) for p in self.iter_productions()])
 
-      if self.is_terminal(top_stack[0].type):
-        if top_stack[0].type == curr_token.type:
-          print(f"Consume input: {curr_token}")
-          stack.get()
-          curr_token = tokens.pop(0)
-        else:
-          error_list.append(f"Expected {top_stack[0].type}")
-          while curr_token.type != top_stack[0].type:
-            if curr_token.type == self.eof:
-              return False, root, error_list
-            curr_token = tokens.pop(0)
-      else:
-        rule = table.get((top_stack[0].type, curr_token.type))
-        stack.get()
-        if rule:
-          print(f"Rule: {rule}")
-          symbols = rule.body[::-1]
-          for symbol in symbols:
-            node = Node(symbol, parent=top_stack[1].type)
-            if symbol != self.epsilon:
-              stack.put((symbol, node))
-        else:
-          error_list.append(f"Unexpected character:{curr_token.type}. Expected: {self.first(top_stack[0])}")
-          follow = self.follow(top_stack[0].type) + [self.eof]
-          print(f"Error! Sync set: {follow}")
-          while curr_token.type not in follow:
-            print(f"Skipped: {curr_token.type}")
-            curr_token = tokens.pop(0)
-      top_stack = stack.peek()
+  def __eq__(self, other):
+    return hash(self) == hash(other)
 
-  def add_rule(self, rule):
-    try:
-      current_productions = self.productions[rule.head]
-      if rule not in current_productions:
-        current_productions.append(rule)
-    except KeyError:
-      self.productions[rule.head] = [rule]
+  def __hash__(self):
+    strings = tuple(sorted([str(p) for p in self.iter_productions()]))
+    return hash(strings)
 
-def open_grammar(grammar, path):
-  productions_file = open(path, 'r')
-  productions_list = productions_file.readlines()
-  productions_file.close()
-  for rule in productions_list:
-    rule = re.sub("\t\n", " ", rule)
-    head, body = [item.strip() for item in rule.split('->')]
-    productions = [production.strip() for production in body.split('|')]
-    productions_tokenized = [tuple(production.split()) for production in productions]
-    for tk_production in productions_tokenized:
-      grammar.add_rule(Rule(head, tk_production))
-  grammar.start = list(grammar.productions.items())[0][0]
-  return grammar
+  def __copy__(self):
+    g = Grammar(start=self.start, epsilon=self.epsilon, eof=self.eof)
+    for h, b in self.productions.items():
+      g.productions[h] = copy(b)
+    return g

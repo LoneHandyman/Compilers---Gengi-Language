@@ -3,7 +3,8 @@ import 'res/img_assets' as imgSource
 import 'scripts/world_1_environment_code.gg' as env
 
 #preprocess_begin
-gnode character_1, enemy_1;
+gnode character_1;
+gnode enemy_1;
 link(character_1, 'scripts/script_char_1.gg'); >>> La funcion link se encarga de conectar
 link(enemy_1, 'scripts/script_enemy_1.gg');    >>> un script como path con una entidad de juego "gnode"
 set(character_1, 'weapons.axe.skin', imgSource.fire_axe.gif);

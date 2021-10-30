@@ -1,5 +1,28 @@
-S -> expr | #
-expr -> ( expr ) | Number @ Number
-func -> Id _ ( func ) | Function Id ( param )
-param -> Id nparam | #
-nparam -> , Id nparam | #
+Start           -> CodeBody
+CodeBody        -> ImportFormat CodeBody | PreprocFormat CodeBody | LinkFormat CodeBody | SetFormat CodeBody | SpawnFormat CodeBody | DeclGnode CodeBody | FunctFormat CodeBody | DeclOrCallForm CodeBody | LoopsFormat CodeBody | BiffFormat CodeBody | ''
+CapCodeBody     -> { CodeBody }
+FuncCodeBody    -> { CodeBody ReturnFormat }
+PreprocFormat   -> sp_prep_begin CodeBody sp_prep_end
+ImportFormat    -> import string as id
+LinkFormat      -> link ( id , string ) ;
+SetFormat       -> set ( id , string , RightValues ) ;
+SpawnFormat     -> spawn id ;
+DeclGnode       -> gnode id ;
+FunctFormat     -> function id ( ListNParams ) FuncCodeBody
+ReturnFormat    -> return RightValues ; | ''
+ListNParams     -> id EnumNParams | ''
+EnumNParams     -> , id EnumNParams | ''
+DeclOrCallForm  -> id DeclOrCallExt
+DeclOrCallExt   -> CallFuncExt ; | = InitDVarShp ;
+InitDVarShp     -> RightValues | [ ListRValues ]
+RightValues     -> BoolAritmForm | string
+RightBoolValues -> id CallFuncExt | number
+ListRValues     -> RightValues EnumRValues | ''
+EnumRValues     -> , RightValues EnumRValues | ''
+CallFuncExt     -> _ id CallFuncExt | ( ListRValues ) CallFuncExt | ''
+LoopsFormat     -> while ( BoolAritmForm ) CapCodeBody | for ( id : id CallFuncExt ) CapCodeBody
+BoolAritmForm   -> ( BoolAritmForm ) BoolAritmExt | RightBoolValues BoolAritmExt | ! BoolAritmForm
+BoolAritmExt    -> ? BoolAritmForm | BOP BoolAritmForm | @ BoolAritmForm | ''
+BiffFormat      -> if ( BoolAritmForm ) CapCodeBody BiffCompForm
+BiffCompForm    -> else BiffCAuxForm | ''
+BiffCAuxForm    -> BiffFormat | CapCodeBody

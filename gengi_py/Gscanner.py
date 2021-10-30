@@ -150,7 +150,7 @@ def scan_code(input):
           new_token_t = Gtoken.token_types[Gtoken.Comparator_op]
         else:
           lexeme_intent = "!"
-          new_token_t = Gtoken.token_types[Gtoken.Boolean_op]
+          new_token_t = Gtoken.token_types[Gtoken.Not_op]
       elif inflection_char == '<':
         if char_source.peek() == '=':
           char_source.get()

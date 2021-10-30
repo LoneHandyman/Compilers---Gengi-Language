@@ -1,9 +1,8 @@
 from queue import LifoQueue
 from anytree import RenderTree
 from collections import OrderedDict
-from Gtoken import Token
+from Ggrammar import Grammar, InvalidGrammar
 from copy import copy
-from Ggrammar import Grammar
 
 class Stack(LifoQueue):
   def peek(self):
@@ -11,19 +10,30 @@ class Stack(LifoQueue):
       return None
     return self.queue[len(self.queue) - 1]
 
+  def get_body(self, sub_item_id=-1):
+    if sub_item_id == -1:
+      return self.queue
+    return [elem[sub_item_id] for elem in self.queue]
+
 class InvalidProduction(Exception):
   def __init__(self, message, production):
     super().__init__(message)
     self.production = production
 
+
 class Rule:
   def __init__(self, head, body):
+    hash(head)
+    hash(body)
     self.head = head
     self.body = body
     if not isinstance(self.body, tuple):
       raise ValueError("Body of production must be a tuple")
     if (head,) == body:
       raise InvalidProduction("Invalid production. Head is the same as body.", self)
+
+  def is_left_recursive(self):
+    return self.body and self.head == self.body[0]
 
   def __eq__(self, other):
     return self.head == other.head and self.body == other.body
@@ -37,42 +47,43 @@ class Rule:
   def __hash__(self):
     return hash((self.head, self.body))
 
-class MemoHelper:
-  def __init__(self, seq=()):
-    self.tup = tuple(seq)
+def open_grammar(path, epsilon='\'\'', eof='$'):
+  productions_file = open(path, 'r')
+  raw_productions = productions_file.read()
+  productions_file.close()
+  try:
+    productions = [p for p in raw_productions.strip().split('\n') if not p.startswith('MASTER')]
+    start = productions[0].split('->')[0].strip()
+    g = Grammar(start=start, epsilon=epsilon, eof=eof)
 
-  def __eq__(self, other):
-    return isinstance(self, type(other))
+    for r in productions:
+      head, body = [x.strip() for x in r.split('->')]
+      productions = [p.strip() for p in body.split('|')]
+      productions_tokenized = [tuple(p.split()) for p in productions]
+      for p in productions_tokenized:
+        g.add_rule(Rule(head, p))
 
-  def __hash__(self):
-    return hash(type(self))
-
-  def __add__(self, seq=()):
-    return MemoHelper(self.tup + tuple(seq))
-
-  def __iter__(self):
-    return iter(self.tup)
-
-  def __str__(self):
-    return str(self.tup)
+    return g
+  except ValueError:
+    raise InvalidGrammar("Invalid grammar", raw_productions)
 
 def show_lexical_errors(tokens):
   status = True
   for token in tokens:
     if token.bad_token:
-      print("\033[91m Error", token.lexeme, "bad token found.")
+      print("\033[91m Error", token.lexeme, "bad token found." + "\033[37m")
       status = False
   return status
 
 def __normalize_productions(grammar):
   normalized_grammar = copy(grammar)
+
   for x in grammar.nonterminals:
     for p in grammar.productions[x]:
       if len(p.body) > 1:
         p.body = tuple([x for x in p.body if x != grammar.epsilon])
 
   return normalized_grammar
-
 
 def nonterminal_ordering(grammar):
   return [x for x in grammar.nonterminals]
@@ -84,6 +95,7 @@ def __generate_key(grammar, x):
     new_x += "'"
 
   return new_x
+
 
 def remove_immediate_left_recursion(grammar, A):
   productions = grammar.productions[A]
@@ -98,7 +110,7 @@ def remove_immediate_left_recursion(grammar, A):
       nonrecursive.append(p.body)
 
   if not recursive:
-      return productions
+    return productions
 
   new_A = __generate_key(grammar, A)
   for b in nonrecursive:
@@ -108,7 +120,9 @@ def remove_immediate_left_recursion(grammar, A):
     new_productions.append(Rule(new_A, a[1:] + (new_A,)))
 
   new_productions.append(Rule(new_A, (grammar.epsilon,)))
+
   return new_productions
+
 
 def remove_left_recursion(g):
   temp_grammar = copy(g)
@@ -121,7 +135,8 @@ def remove_left_recursion(g):
       aj = nonterminals[j]
       for p_ai in temp_grammar.productions[ai]:
         if p_ai.body and aj == p_ai.body[0]:
-          replaced_productions = [Rule(ai, p_aj.body + p_ai.body[1:]) for p_aj in temp_grammar.productions[aj]]
+          replaced_productions = [Rule(ai, p_aj.body + p_ai.body[1:]) for p_aj in
+                                  temp_grammar.productions[aj]]
           can_remove_productions = any(map(lambda x: x.is_left_recursive(), replaced_productions))
           if can_remove_productions:
             temp_grammar.remove_rule(p_ai)
@@ -163,6 +178,7 @@ def get_prefixes(productions):
       final_key = ' '.join(v[0][0:common_index + 1])
       common[final_key] = common[k]
       del common[k]
+
   return common
 
 
@@ -178,13 +194,11 @@ def check_left_factors(grammar):
           return True
   return False
 
-
 def remove_left_factoring(grammar):
   g = grammar
   while (check_left_factors(g)):
     g = __remove_left_factoring(g)
   return g
-
 
 def __remove_left_factoring(grammar):
   new_grammar = Grammar(start=grammar.start, epsilon=grammar.epsilon, eof=grammar.eof)
@@ -206,15 +220,49 @@ def __remove_left_factoring(grammar):
           else:
             new_productions.append(Rule(new_x, tuple(prod)))
     else:
-        new_productions.append(Rule(nonterminal, tuple(productions[0])))
+      new_productions.append(Rule(nonterminal, tuple(productions[0])))
 
   for prod in new_productions:
-      new_grammar.add_rule(prod)
+    new_grammar.add_rule(prod)
   return __normalize_productions(new_grammar)
-
 
 def __join_amb(entry):
   return ' | '.join([str(e) for e in entry])
+
+
+def pprint_table(g, table, padding=4):
+  terminals = sorted(set(g.terminals) - {g.epsilon}) + [g.eof]
+  nonterminals = [nt for nt in g.nonterminals]
+
+  width_nt = max([len(x) for x in nonterminals])
+  width = max([len(str(p)) for p in g.iter_productions()])
+
+  amb = [len(__join_amb(x)) for x in table.values() if isinstance(x, list)]
+  if amb:
+    width = max(width, *amb)
+
+  width += padding
+  if width % 2 == 0:
+    width += 1
+
+  print('{:{width}}'.format('', width=width_nt + 2), end='')
+  for t in terminals:
+    print('{:^{width}}'.format(t, width=width), end='')
+
+  print()
+  print('-' * ((len(terminals)) * width + width_nt))
+
+  print()
+  for x in nonterminals:
+    print('{:{width}} |'.format(x, width=width_nt), end='')
+    for t in terminals:
+      entry = table.get((x, t), '-')
+      if isinstance(entry, list):
+        entry = __join_amb(entry)
+      print('{:^{width}}'.format(str(entry), width=width), end='')
+
+    print()
+  print()
 
 def read_parsing_tree(tree):
   for pre, fill, node in RenderTree(tree):
